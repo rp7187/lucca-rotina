@@ -1,7 +1,9 @@
+import { useState } from "preact/hooks";
 import type { Store } from "../app";
+import { AdjustStart } from "./adjust-start";
 import { useNow } from "../hooks";
 import { SIDE_NAME, entryEnd, feedDur, other, sideDur, sidesLabel, uid, type Feed, type Side, type Sleep } from "../model";
-import { MIN, addDays, ago, clock, dur, startOfDay, timer } from "../time";
+import { addDays, ago, clock, dur, startOfDay, timer } from "../time";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -18,14 +20,15 @@ export function Home({ store }: { store: Store }) {
         <h1>Lucca</h1>
         <p class="muted">{capitalize(new Date(now).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}</p>
       </header>
-      <FeedCard store={store} feeds={feeds} active={activeFeed} now={now} />
+      <FeedCard store={store} feeds={feeds} active={activeFeed} sleeping={activeSleep} sleeps={sleeps} now={now} />
       <SleepCard store={store} sleeps={sleeps} active={activeSleep} now={now} />
       <Today feeds={feeds} sleeps={sleeps} now={now} />
     </>
   );
 }
 
-function FeedCard({ store, feeds, active, now }: { store: Store; feeds: Feed[]; active?: Feed; now: number }) {
+function FeedCard({ store, feeds, active, sleeping, sleeps, now }: { store: Store; feeds: Feed[]; active?: Feed; sleeping?: Sleep; sleeps: Sleep[]; now: number }) {
+  const [adjusting, setAdjusting] = useState(false);
   const last = [...feeds].reverse().find((f) => f.end !== null);
   const suggested: Side = last ? other(last.segments[0]?.side ?? "D") : "E";
 
@@ -53,20 +56,34 @@ function FeedCard({ store, feeds, active, now }: { store: Store; feeds: Feed[]; 
             store.save({ ...active, end: t, segments: close(t) });
           }}>Finalizar</button>
         </div>
-        <div class="minor">
-          <button type="button" class="link" onClick={() => {
-            const shift = 5 * MIN;
-            store.save({ ...active, start: active.start - shift, segments: active.segments.map((g, i) => (i === 0 ? { ...g, start: g.start - shift } : g)) });
-          }}>Começou antes? −5 min</button>
-          <button type="button" class="link danger" onClick={() => { if (confirm("Descartar esta mamada?")) store.remove(active.id); }}>Descartar</button>
-        </div>
+        {adjusting ? (
+          <AdjustStart title="Começou às" start={active.start} latest={active.segments[0].end ?? Date.now()}
+            onCancel={() => setAdjusting(false)}
+            onSave={(t) => {
+              store.save({ ...active, start: t, segments: active.segments.map((g, i) => (i === 0 ? { ...g, start: t } : g)) });
+              // Soneca encerrada por esta mamada (fim = início antigo): passa a terminar no novo início.
+              const cut = sleeps.find((x) => x.end !== null && Math.abs(x.end - active.start) < 60_000 && x.start < t);
+              if (cut && t < active.start) store.save({ ...cut, end: t });
+              setAdjusting(false);
+            }} />
+        ) : (
+          <div class="minor">
+            <button type="button" class="link" onClick={() => setAdjusting(true)}>Começou antes? Ajustar início</button>
+            <button type="button" class="link danger" onClick={() => { if (confirm("Descartar esta mamada?")) store.remove(active.id); }}>Descartar</button>
+          </div>
+        )}
       </section>
     );
   }
 
-  const start = (side: Side) => {
+  const start = async (side: Side) => {
+    // Mamar acorda o bebê: a soneca em andamento é encerrada (com confirmação).
+    if (sleeping) {
+      if (!confirm(`O Lucca está dormindo desde ${clock(sleeping.start)}. Iniciar a mamada encerra a soneca agora. Continuar?`)) return;
+      await store.save({ ...sleeping, end: Date.now() });
+    }
     const t = Date.now();
-    store.save({ id: uid(), kind: "feed", start: t, end: null, segments: [{ side, start: t, end: null }] });
+    await store.save({ id: uid(), kind: "feed", start: t, end: null, segments: [{ side, start: t, end: null }] });
   };
   return (
     <section class="card feed">
@@ -90,6 +107,7 @@ function FeedCard({ store, feeds, active, now }: { store: Store; feeds: Feed[]; 
 }
 
 function SleepCard({ store, sleeps, active, now }: { store: Store; sleeps: Sleep[]; active?: Sleep; now: number }) {
+  const [adjusting, setAdjusting] = useState(false);
   const last = [...sleeps].reverse().find((s) => s.end !== null);
   if (active) {
     return (
@@ -99,10 +117,16 @@ function SleepCard({ store, sleeps, active, now }: { store: Store; sleeps: Sleep
         <div class="actions">
           <button type="button" class="btn primary sleep" onClick={() => store.save({ ...active, end: Date.now() })}>Acordou</button>
         </div>
-        <div class="minor">
-          <button type="button" class="link" onClick={() => store.save({ ...active, start: active.start - 5 * MIN })}>Dormiu antes? −5 min</button>
-          <button type="button" class="link danger" onClick={() => { if (confirm("Descartar esta soneca?")) store.remove(active.id); }}>Descartar</button>
-        </div>
+        {adjusting ? (
+          <AdjustStart title="Dormiu às" start={active.start} latest={Date.now()}
+            onCancel={() => setAdjusting(false)}
+            onSave={(t) => { store.save({ ...active, start: t }); setAdjusting(false); }} />
+        ) : (
+          <div class="minor">
+            <button type="button" class="link" onClick={() => setAdjusting(true)}>Dormiu antes? Ajustar início</button>
+            <button type="button" class="link danger" onClick={() => { if (confirm("Descartar esta soneca?")) store.remove(active.id); }}>Descartar</button>
+          </div>
+        )}
       </section>
     );
   }

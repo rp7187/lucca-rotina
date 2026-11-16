@@ -221,3 +221,12 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-nu
 th, td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+/* Ajuste do início (registro em andamento) */
+.adjust { margin-top: 12px; padding: 12px; background: var(--surface-2); border-radius: 12px; display: flex; flex-direction: column; gap: 10px; }
+.adjust label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--text-2); }
+.adjust input { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 20px; min-height: 48px; font-variant-numeric: tabular-nums; }
+.adjust .error { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--bg); border: 1px solid var(--border); color: var(--text-2); border-radius: 999px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
+.btn.primary-neutral { background: var(--text); color: var(--on-color); }
