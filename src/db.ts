@@ -4,6 +4,8 @@ import type { Entry } from "./model";
  * Armazenamento 100% local (IndexedDB do Safari). Um único "store" com todos os registros;
  * o volume é pequeno (poucos KB por mês), então o app carrega tudo na memória ao abrir.
  */
+// ATENÇÃO: os dados do celular dependem destes nomes. Não renomear; mudanças de estrutura só com
+// nova versão + migração em onupgradeneeded, sem apagar registros (ver CLAUDE.md).
 const DB_NAME = "lucca-rotina";
 const STORE = "entries";
 
