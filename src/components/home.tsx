@@ -51,9 +51,13 @@ function FeedCard({ store, feeds, active, sleeping, sleeps, now }: { store: Stor
             const t = Date.now();
             store.save({ ...active, segments: [...close(t), { side: other(seg.side), start: t, end: null }] });
           }}>Trocar para {SIDE_NAME[other(seg.side)]}</button>
-          <button type="button" class="btn primary feed" onClick={() => {
+          <button type="button" class="btn primary feed" onClick={async () => {
             const t = Date.now();
-            store.save({ ...active, end: t, segments: close(t) });
+            await store.save({ ...active, end: t, segments: close(t) });
+            // Depois de mamar o bebê costuma dormir: oferece já iniciar a soneca (a partir do fim da mamada).
+            if (!sleeping && confirm("Mamada finalizada. Iniciar uma soneca agora?")) {
+              await store.save({ id: uid(), kind: "sleep", start: t, end: null });
+            }
           }}>Finalizar</button>
         </div>
         {adjusting ? (
