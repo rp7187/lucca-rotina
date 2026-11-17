@@ -60,8 +60,8 @@ export function BarChart({ values, labels, ticks, format, formatAverage = format
 }
 
 /** Linha do tempo 24 h: uma faixa por dia (mais recente em cima), sono e mamadas. */
-export function Timeline({ entries, days, now, dayName }: { entries: Entry[]; days: number[]; now: number; dayName: (d: number) => string }) {
-  const [sel, setSel] = useState<number | null>(null);
+export function Timeline({ entries, days, now, dayName, initialDay = null }: { entries: Entry[]; days: number[]; now: number; dayName: (d: number) => string; initialDay?: number | null }) {
+  const [sel, setSel] = useState<number | null>(initialDay);
   const W = 340, labelW = 44, row = 18, gap = 6, top = 4;
   const plotW = W - labelW - 4;
   const ordered = [...days].reverse();
