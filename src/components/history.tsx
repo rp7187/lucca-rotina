@@ -22,6 +22,7 @@ export function History({ store }: { store: Store }) {
         <div class="row-actions">
           <button type="button" class="btn small ghost" onClick={() => store.edit({ kind: "feed" })}>+ Mamada</button>
           <button type="button" class="btn small ghost" onClick={() => store.edit({ kind: "sleep" })}>+ Soneca</button>
+          <button type="button" class="btn small ghost" onClick={() => store.edit({ kind: "bath" })}>+ Banho</button>
         </div>
       </header>
       {!days.length && <p class="muted empty">Nada registrado ainda. Use a aba Agora ou os botões acima para lançar registros antigos.</p>}
@@ -34,17 +35,21 @@ export function History({ store }: { store: Store }) {
                 <button type="button" class="item" onClick={() => store.edit(e)}>
                   <span class={`dot ${e.kind}`} />
                   <span class="what">
-                    {e.kind === "feed" ? `Mamada · ${sidesLabel(e)}` : "Soneca"}
+                    {e.kind === "feed" ? `Mamada · ${sidesLabel(e)}` : e.kind === "bath" ? "Banho" : "Soneca"}
                     {e.kind === "feed" && e.segments.length > 0 && (
                       <small class="muted">
                         {(["E", "D"] as const).filter((s) => sideDur(e, s, now) > 0).map((s) => `${s} ${dur(sideDur(e, s, now))}`).join(" · ")}
                       </small>
                     )}
                   </span>
-                  <span class="when">
-                    {clock(e.start)}–{e.end ? clock(e.end) : "agora"}
-                    <b>{dur(e.kind === "feed" ? feedDur(e, now) : (e.end ?? now) - e.start)}</b>
-                  </span>
+                  {e.kind === "bath" ? (
+                    <span class="when"><b>{clock(e.start)}</b></span>
+                  ) : (
+                    <span class="when">
+                      {clock(e.start)}–{e.end ? clock(e.end) : "agora"}
+                      <b>{dur(e.kind === "feed" ? feedDur(e, now) : (e.end ?? now) - e.start)}</b>
+                    </span>
+                  )}
                 </button>
               </li>
             ))}

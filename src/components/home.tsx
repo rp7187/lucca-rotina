@@ -2,8 +2,8 @@ import { useState } from "preact/hooks";
 import type { Store } from "../app";
 import { AdjustStart } from "./adjust-start";
 import { useNow } from "../hooks";
-import { SIDE_NAME, entryEnd, feedDur, other, sideDur, sidesLabel, uid, type Feed, type Side, type Sleep } from "../model";
-import { addDays, ago, clock, dur, startOfDay, timer } from "../time";
+import { SIDE_NAME, entryEnd, feedDur, other, sideDur, sidesLabel, uid, type Bath, type Feed, type Side, type Sleep } from "../model";
+import { addDays, ago, clock, dayLabel, dur, startOfDay, timer } from "../time";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -13,6 +13,7 @@ export function Home({ store }: { store: Store }) {
   const sleeps = store.entries.filter((e): e is Sleep => e.kind === "sleep");
   const activeFeed = feeds.find((f) => f.end === null);
   const activeSleep = sleeps.find((s) => s.end === null);
+  const baths = store.entries.filter((e): e is Bath => e.kind === "bath");
 
   return (
     <>
@@ -22,6 +23,7 @@ export function Home({ store }: { store: Store }) {
       </header>
       <FeedCard store={store} feeds={feeds} active={activeFeed} sleeping={activeSleep} sleeps={sleeps} now={now} />
       <SleepCard store={store} sleeps={sleeps} active={activeSleep} now={now} />
+      <BathCard store={store} baths={baths} now={now} />
       <Today feeds={feeds} sleeps={sleeps} now={now} />
     </>
   );
@@ -147,6 +149,28 @@ function SleepCard({ store, sleeps, active, now }: { store: Store; sleeps: Sleep
         <button type="button" class="btn big primary sleep" onClick={() => store.save({ id: uid(), kind: "sleep", start: Date.now(), end: null })}>
           Iniciar soneca
         </button>
+      </div>
+    </section>
+  );
+}
+
+function BathCard({ store, baths, now }: { store: Store; baths: Bath[]; now: number }) {
+  const last = baths[baths.length - 1];
+  return (
+    <section class="card bath">
+      <div class="card-head"><span class="dot bath" />Banho</div>
+      {last ? (
+        <p class="status">
+          Último <b>{ago(now - last.start)}</b>
+          <span class="muted"> · {dayLabel(last.start, now).toLowerCase()}, {clock(last.start)}</span>
+        </p>
+      ) : <p class="status muted">Nenhum banho registrado ainda.</p>}
+      <div class="actions">
+        <button type="button" class="btn primary bath" onClick={() => {
+          const t = Date.now();
+          if (confirm(`Registrar banho agora (${clock(t)})?`)) store.save({ id: uid(), kind: "bath", start: t, end: t });
+        }}>Banho agora</button>
+        <button type="button" class="btn ghost" onClick={() => store.edit({ kind: "bath" })}>Outro horário</button>
       </div>
     </section>
   );

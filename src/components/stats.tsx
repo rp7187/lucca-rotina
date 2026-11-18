@@ -55,6 +55,7 @@ export function Stats({ entries }: { entries: Entry[] }) {
         <Kpi label={today ? "Sono" : "Sono por dia"} value={fmt(s.sleepPerDay, hoursFmt)} />
         <Kpi label={today ? "Sonecas" : "Sonecas por dia"} value={fmt(s.napsPerDay, one)} hint={s.avgNapMs ? `média ${dur(s.avgNapMs)}` : undefined} />
         <Kpi label="Janela acordado" value={fmt(s.avgWakeMs, hoursFmt)} hint="entre sonecas" />
+        <Kpi label={today ? "Banhos" : "Banhos por dia"} value={fmt(s.bathsPerDay, one)} />
         <Kpi label="Maior sono" value={fmt(s.longestSleepMs, hoursFmt)} hint={today ? "hoje" : "no período"} />
       </section>
 

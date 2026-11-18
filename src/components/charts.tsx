@@ -92,18 +92,24 @@ export function Timeline({ entries, days, now, dayName, initialDay = null }: { e
               {blocks.filter((b) => b.kind === "feed").map((b, j) => (
                 <rect key={`f${j}`} x={x(b.from) - 1} y={y0 + 4} width={Math.max(3, x(b.to) - x(b.from)) + 2} height={row - 8} rx={2} class="blk feed" />
               ))}
+              {blocks.filter((b) => b.kind === "bath").map((b, j) => (
+                // banho: marcador fino da altura da faixa (formato diferente dos blocos de sono/mamada)
+                <rect key={`b${j}`} x={x(b.from) - 2} y={y0 - 2} width={4} height={row + 4} rx={2} class="blk bath" />
+              ))}
             </g>
           );
         })}
       </svg>
-      <Legend items={[["sleep", "Sono"], ["feed", "Mamada"]]} />
+      <Legend items={[["sleep", "Sono"], ["feed", "Mamada"], ["bath", "Banho"]]} />
       {sel !== null && (
         <div class="day-detail">
           <b>{dayName(sel)}</b>
           {selBlocks.length === 0 && <span class="muted"> · sem registros</span>}
           <ul>
             {selBlocks.map((b, j) => (
-              <li key={j}><span class={`dot ${b.kind}`} />{b.kind === "feed" ? "Mamada" : "Sono"} {clock(b.entry.start)}–{b.entry.end ? clock(b.entry.end) : "agora"} <span class="muted">({dur((b.entry.end ?? now) - b.entry.start)})</span></li>
+              <li key={j}><span class={`dot ${b.kind}`} />
+                {b.kind === "bath" ? <>Banho {clock(b.entry.start)}</> : <>{b.kind === "feed" ? "Mamada" : "Sono"} {clock(b.entry.start)}–{b.entry.end ? clock(b.entry.end) : "agora"} <span class="muted">({dur((b.entry.end ?? now) - b.entry.start)})</span></>}
+              </li>
             ))}
           </ul>
         </div>

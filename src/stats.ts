@@ -16,6 +16,7 @@ export type DayStats = {
   naps: number; // sonecas iniciadas no dia
   longestSleepMs: number;
   wakeWindows: number[]; // fim de uma soneca → início da próxima
+  baths: number;
 };
 
 export type Summary = {
@@ -28,6 +29,7 @@ export type Summary = {
   avgNapMs: number | null;
   longestSleepMs: number | null;
   avgWakeMs: number | null;
+  bathsPerDay: number | null;
   leftMs: number;
   rightMs: number;
 };
@@ -44,7 +46,7 @@ export function computeStats(entries: Entry[], now: number, nDays: number) {
 
   const days: DayStats[] = [];
   for (let d = first; d <= today; d = addDays(d, 1)) {
-    days.push({ day: d, partial: d === today, feeds: 0, feedMs: 0, leftMs: 0, rightMs: 0, intervals: [], sleepMs: 0, naps: 0, longestSleepMs: 0, wakeWindows: [] });
+    days.push({ day: d, partial: d === today, feeds: 0, feedMs: 0, leftMs: 0, rightMs: 0, intervals: [], sleepMs: 0, naps: 0, longestSleepMs: 0, wakeWindows: [], baths: 0 });
   }
   const dayOf = (t: number) => days.find((x) => x.day === startOfDay(t));
 
@@ -73,6 +75,8 @@ export function computeStats(entries: Entry[], now: number, nDays: number) {
     }
   });
 
+  for (const e of entries) if (e.kind === "bath") { const d = dayOf(e.start); if (d) d.baths++; }
+
   // Médias por dia: só dias completos desde o primeiro registro (hoje distorce: o dia não acabou).
   const firstRecord = entries.length ? startOfDay(Math.min(...entries.map((e) => e.start))) : today;
   let basis = days.filter((d) => !d.partial && d.day >= firstRecord);
@@ -91,6 +95,7 @@ export function computeStats(entries: Entry[], now: number, nDays: number) {
     avgNapMs: totalNaps ? basis.reduce((s, d) => s + d.sleepMs, 0) / totalNaps : null,
     longestSleepMs: days.some((d) => d.longestSleepMs) ? Math.max(...days.map((d) => d.longestSleepMs)) : null,
     avgWakeMs: mean(basis.flatMap((d) => d.wakeWindows)),
+    bathsPerDay: perDay((d) => d.baths),
     leftMs: days.reduce((s, d) => s + d.leftMs, 0),
     rightMs: days.reduce((s, d) => s + d.rightMs, 0),
   };
@@ -109,6 +114,11 @@ export function dayBlocks(entries: Entry[], day: number, now: number) {
   for (const e of entries) {
     const a = Math.max(e.start, day);
     const b = Math.min(entryEnd(e, now), end);
+    if (e.kind === "bath") {
+      // pontual: entra como marcador no horário
+      if (e.start >= day && e.start < end) out.push({ kind: e.kind, from: (e.start - day) / HOUR, to: (e.start - day) / HOUR, entry: e });
+      continue;
+    }
     if (b > a) out.push({ kind: e.kind, from: (a - day) / HOUR, to: (b - day) / HOUR, entry: e });
   }
   return out;

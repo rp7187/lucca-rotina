@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Store } from "../app";
-import { SIDE_NAME, other, segmentsFromForm, sideDur, uid, type Entry, type Side } from "../model";
+import { KIND_NAME, SIDE_NAME, other, segmentsFromForm, sideDur, uid, type Entry, type Side } from "../model";
 import { MIN, fromLocalInput, toLocalInput } from "../time";
 
 /** Lançar / corrigir um registro. `entry` sem id = novo. */
@@ -8,9 +8,10 @@ export function EditSheet({ store, entry, onClose }: { store: Store; entry: Entr
   const existing = "id" in entry ? entry : null;
   const now = Date.now();
   const isFeed = entry.kind === "feed";
+  const isBath = entry.kind === "bath";
   const active = existing?.end === null;
 
-  const [start, setStart] = useState(toLocalInput(existing?.start ?? now - (isFeed ? 20 : 60) * MIN));
+  const [start, setStart] = useState(toLocalInput(existing?.start ?? now - (isBath ? 0 : isFeed ? 20 : 60) * MIN));
   const [end, setEnd] = useState(toLocalInput(existing?.end ?? now));
   const firstSide: Side = existing?.kind === "feed" ? existing.segments[0]?.side ?? "E" : "E";
   const [first, setFirst] = useState<Side>(firstSide);
@@ -28,8 +29,10 @@ export function EditSheet({ store, entry, onClose }: { store: Store; entry: Entr
     ev.preventDefault();
     const s = fromLocalInput(start);
     if (s === null) return setError("Informe o início.");
-    if (s > Date.now() + MIN) return setError("O início não pode ser no futuro.");
-    if (isFeed) {
+    if (s > Date.now() + MIN) return setError(isBath ? "O horário não pode ser no futuro." : "O início não pode ser no futuro.");
+    if (isBath) {
+      await store.save({ id: existing?.id ?? uid(), kind: "bath", start: s, end: s });
+    } else if (isFeed) {
       const a = Number(minFirst.replace(",", "."));
       const b = Number(minSecond.replace(",", "."));
       if (!(a >= 0) || !(b >= 0) || a + b <= 0) return setError("Informe os minutos em pelo menos um dos lados.");
@@ -49,13 +52,13 @@ export function EditSheet({ store, entry, onClose }: { store: Store; entry: Entr
     <div class="sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class="sheet-wrap" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
       <form class="sheet" onSubmit={submit}>
-        <h2 id="sheet-title">{existing ? "Editar" : "Lançar"} {isFeed ? "mamada" : "soneca"}</h2>
+        <h2 id="sheet-title">{existing ? "Editar" : "Lançar"} {KIND_NAME[entry.kind]}</h2>
         {active ? (
           <p class="muted">Este registro está em andamento: finalize na aba Agora para editar.</p>
         ) : (
           <>
-            <label>Início<input type="datetime-local" value={start} onInput={(e) => setStart(e.currentTarget.value)} required /></label>
-            {isFeed ? (
+            <label>{isBath ? "Data e hora" : "Início"}<input type="datetime-local" value={start} onInput={(e) => setStart(e.currentTarget.value)} required /></label>
+            {isBath ? null : isFeed ? (
               <>
                 <span class="label">Começou pelo</span>
                 <div class="seg">

@@ -10,7 +10,12 @@ export type Feed = { id: string; kind: "feed"; start: number; end: number | null
 /** Soneca / sono. `end === null` = dormindo agora. */
 export type Sleep = { id: string; kind: "sleep"; start: number; end: number | null };
 
-export type Entry = Feed | Sleep;
+/** Banho: só o horário (registro pontual; `end` = `start`). Adicionado depois da v1 — tipo novo, os antigos não mudam. */
+export type Bath = { id: string; kind: "bath"; start: number; end: number };
+
+export type Entry = Feed | Sleep | Bath;
+
+export const KIND_NAME: Record<Entry["kind"], string> = { feed: "mamada", sleep: "soneca", bath: "banho" };
 
 export const SIDE_NAME: Record<Side, string> = { E: "Esquerdo", D: "Direito" };
 export const other = (s: Side): Side => (s === "E" ? "D" : "E");
@@ -56,6 +61,7 @@ export function isEntry(x: unknown): x is Entry {
   const okTimes = typeof e.id === "string" && typeof e.start === "number" && (e.end === null || typeof e.end === "number");
   if (!okTimes) return false;
   if (e.kind === "sleep") return true;
+  if (e.kind === "bath") return typeof e.end === "number";
   return e.kind === "feed" && Array.isArray(e.segments) &&
     e.segments.every((g: Record<string, unknown>) => (g.side === "E" || g.side === "D") && typeof g.start === "number");
 }
