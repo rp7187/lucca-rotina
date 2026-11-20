@@ -118,12 +118,20 @@ h2 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
 .link { background: none; border: 0; color: var(--text-2); font-size: 14px; padding: 8px 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .link.danger { color: var(--danger); }
 
-/* Hoje */
-.today { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.today > div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
-.today span { font-size: 13px; }
-.today b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.today small { font-size: 12px; }
+/* Tela Agora: resumo de hoje, previsão da próxima mamada, banho compacto */
+.strip { padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.strip-sum { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.strip-sum b { color: var(--text); font-weight: 600; }
+.strip svg { width: 100%; height: auto; display: block; overflow: visible; }
+.lane-future { fill: var(--bg); opacity: 0.4; }
+.now-mark { stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+.predict { margin: -4px 0 14px; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; font-size: 16px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.predict small { display: block; font-size: 13px; color: var(--muted); }
+.card.compact { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bath-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.bath-last { font-size: 15px; color: var(--text-2); }
+.bath-last b { color: var(--text); font-weight: 600; }
+.bath-actions { display: flex; gap: 8px; }
 
 /* Segmentado */
 .seg { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 3px; }

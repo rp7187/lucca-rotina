@@ -1,11 +1,14 @@
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import type { Store } from "../app";
 import { AdjustStart } from "./adjust-start";
 import { useNow } from "../hooks";
-import { SIDE_NAME, entryEnd, feedDur, other, sideDur, sidesLabel, uid, type Bath, type Feed, type Side, type Sleep } from "../model";
-import { addDays, ago, clock, dayLabel, dur, startOfDay, timer } from "../time";
+import { SIDE_NAME, entryEnd, feedDur, other, sideDur, sidesLabel, uid, type Bath, type Entry, type Feed, type Side, type Sleep } from "../model";
+import { dayBlocks, predictNextFeed } from "../stats";
+import { MIN, addDays, ago, clock, dayLabel, dur, startOfDay, timer } from "../time";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Arredonda para 5 min: a previsão é aproximada ("por volta de 15:50"). */
+const round5 = (t: number) => Math.round(t / (5 * MIN)) * 5 * MIN;
 
 export function Home({ store }: { store: Store }) {
   const now = useNow();
@@ -21,16 +24,17 @@ export function Home({ store }: { store: Store }) {
         <h1>Lucca</h1>
         <p class="muted">{capitalize(new Date(now).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }))}</p>
       </header>
+      <TodayStrip entries={store.entries} feeds={feeds} sleeps={sleeps} baths={baths} now={now} />
       <FeedCard store={store} feeds={feeds} active={activeFeed} sleeping={activeSleep} sleeps={sleeps} now={now} />
       <SleepCard store={store} sleeps={sleeps} active={activeSleep} now={now} />
       <BathCard store={store} baths={baths} now={now} />
-      <Today feeds={feeds} sleeps={sleeps} now={now} />
     </>
   );
 }
 
 function FeedCard({ store, feeds, active, sleeping, sleeps, now }: { store: Store; feeds: Feed[]; active?: Feed; sleeping?: Sleep; sleeps: Sleep[]; now: number }) {
   const [adjusting, setAdjusting] = useState(false);
+  const next = useMemo(() => predictNextFeed(store.entries, Date.now()), [store.entries]);
   const last = [...feeds].reverse().find((f) => f.end !== null);
   const suggested: Side = last ? other(last.segments[0]?.side ?? "D") : "E";
 
@@ -100,6 +104,14 @@ function FeedCard({ store, feeds, active, sleeping, sleeps, now }: { store: Stor
           <span class="muted"> · {clock(last.start)} · {dur(feedDur(last, now))} · {sidesLabel(last)}</span>
         </p>
       ) : <p class="status muted">Nenhuma mamada registrada ainda.</p>}
+      {next && (
+        <p class="predict">
+          {now < round5(next.at)
+            ? <>Próxima por volta de <b>{clock(round5(next.at))}</b> <span class="muted">· em {dur(round5(next.at) - now)}</span></>
+            : <>Próxima prevista para <b>{clock(round5(next.at))}</b></>}
+          <small>{next.sameTime ? "Neste horário, costuma" : "Costuma"} mamar a cada {dur(next.typical)}.</small>
+        </p>
+      )}
       <div class="actions">
         {(["E", "D"] as const).map((s) => (
           <button key={s} type="button" class={`btn big side-${s} ${s === suggested ? "suggested" : "ghost"}`} onClick={() => start(s)}>
@@ -142,7 +154,7 @@ function SleepCard({ store, sleeps, active, now }: { store: Store; sleeps: Sleep
       {last ? (
         <p class="status">
           Acordado <b>{ago(now - last.end!)}</b>
-          <span class="muted"> · última soneca {clock(last.start)}–{clock(last.end!)} ({dur(last.end! - last.start)})</span>
+          <span class="muted"> · último sono {clock(last.start)}–{clock(last.end!)} ({dur(last.end! - last.start)})</span>
         </p>
       ) : <p class="status muted">Nenhuma soneca registrada ainda.</p>}
       <div class="actions">
@@ -156,35 +168,63 @@ function SleepCard({ store, sleeps, active, now }: { store: Store; sleeps: Sleep
 
 function BathCard({ store, baths, now }: { store: Store; baths: Bath[]; now: number }) {
   const last = baths[baths.length - 1];
+  // Banho é raro: cartão compacto, numa linha só.
   return (
-    <section class="card bath">
-      <div class="card-head"><span class="dot bath" />Banho</div>
-      {last ? (
-        <p class="status">
-          Último <b>{ago(now - last.start)}</b>
-          <span class="muted"> · {dayLabel(last.start, now).toLowerCase()}, {clock(last.start)}</span>
-        </p>
-      ) : <p class="status muted">Nenhum banho registrado ainda.</p>}
-      <div class="actions">
-        <button type="button" class="btn primary bath" onClick={() => {
+    <section class="card bath compact">
+      <div class="bath-info">
+        <div class="card-head"><span class="dot bath" />Banho</div>
+        <span class="bath-last">
+          {last ? <>Último <b>{dayLabel(last.start, now).toLowerCase()}, {clock(last.start)}</b></> : <span class="muted">Nenhum registrado</span>}
+        </span>
+      </div>
+      <div class="bath-actions">
+        <button type="button" class="btn small primary bath" onClick={() => {
           const t = Date.now();
           if (confirm(`Registrar banho agora (${clock(t)})?`)) store.save({ id: uid(), kind: "bath", start: t, end: t });
-        }}>Banho agora</button>
-        <button type="button" class="btn ghost" onClick={() => store.edit({ kind: "bath" })}>Outro horário</button>
+        }}>Agora</button>
+        <button type="button" class="btn small ghost" onClick={() => store.edit({ kind: "bath" })}>Outro horário</button>
       </div>
     </section>
   );
 }
 
-function Today({ feeds, sleeps, now }: { feeds: Feed[]; sleeps: Sleep[]; now: number }) {
+/** Resumo de hoje no topo: totais e uma faixa 0h–24h com sono, mamadas e banhos. */
+function TodayStrip({ entries, feeds, sleeps, baths, now }: { entries: Entry[]; feeds: Feed[]; sleeps: Sleep[]; baths: Bath[]; now: number }) {
   const d0 = startOfDay(now);
   const d1 = addDays(d0, 1);
   const todayFeeds = feeds.filter((f) => f.start >= d0);
   const sleepMs = sleeps.reduce((s, x) => s + Math.max(0, Math.min(entryEnd(x, now), d1) - Math.max(x.start, d0)), 0);
+  const todayBaths = baths.filter((b) => b.start >= d0);
+  const blocks = dayBlocks(entries, d0, now);
+  const W = 360, LANE = 22, H = 40;
+  const x = (h: number) => (h / 24) * W;
+  const nowH = (now - d0) / 3_600_000;
   return (
-    <section class="today">
-      <div><span class="muted">Mamadas hoje</span><b>{todayFeeds.length}</b><small class="muted">{dur(todayFeeds.reduce((s, f) => s + feedDur(f, now), 0))} no total</small></div>
-      <div><span class="muted">Sono hoje</span><b>{dur(sleepMs)}</b><small class="muted">{sleeps.filter((s) => s.start >= d0).length} soneca(s)</small></div>
+    <section class="card strip" aria-label="Resumo de hoje">
+      <p class="strip-sum">
+        <span><b>{todayFeeds.length}</b> {todayFeeds.length === 1 ? "mamada" : "mamadas"} <span class="muted">({dur(todayFeeds.reduce((s, f) => s + feedDur(f, now), 0))})</span></span>
+        <span><b>{dur(sleepMs)}</b> de sono</span>
+        <span>{todayBaths.length ? <>banho <b>{clock(todayBaths[todayBaths.length - 1].start)}</b></> : <span class="muted">sem banho</span>}</span>
+      </p>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Linha do tempo de hoje">
+        <rect x={0} y={0} width={W} height={LANE} rx={5} class="lane" />
+        <rect x={0} y={0} width={x(7)} height={LANE} rx={5} class="lane-night" />
+        <rect x={x(19)} y={0} width={x(24) - x(19)} height={LANE} rx={5} class="lane-night" />
+        <rect x={x(nowH)} y={0} width={Math.max(0, W - x(nowH))} height={LANE} class="lane-future" />
+        {blocks.filter((b) => b.kind === "sleep").map((b, j) => (
+          <rect key={`s${j}`} x={x(b.from)} y={2} width={Math.max(2, x(b.to) - x(b.from))} height={LANE - 4} rx={3} class="blk sleep" />
+        ))}
+        {blocks.filter((b) => b.kind === "feed").map((b, j) => (
+          <rect key={`f${j}`} x={x(b.from) - 1} y={6} width={Math.max(4, x(b.to) - x(b.from)) + 2} height={LANE - 12} rx={2} class="blk feed" />
+        ))}
+        {blocks.filter((b) => b.kind === "bath").map((b, j) => (
+          <rect key={`b${j}`} x={x(b.from) - 2.5} y={-3} width={5} height={LANE + 6} rx={2.5} class="blk bath" />
+        ))}
+        <line x1={x(nowH)} x2={x(nowH)} y1={-4} y2={LANE + 4} class="now-mark" />
+        {[0, 6, 12, 18, 24].map((h) => (
+          <text key={h} x={x(h)} y={H - 2} class="xtick" text-anchor={h === 0 ? "start" : h === 24 ? "end" : "middle"}>{h}h</text>
+        ))}
+      </svg>
     </section>
   );
 }

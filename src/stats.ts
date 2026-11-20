@@ -154,6 +154,38 @@ export function computeStats(entries: Entry[], now: number, nDays: number) {
   };
 }
 
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+
+/**
+ * Previsão da próxima mamada: início da última + intervalo típico.
+ * O intervalo muda muito entre dia e noite, então usa os intervalos dos últimos 7 dias que começaram
+ * perto do mesmo horário (±2h); com poucos exemplos, usa todos os dos 7 dias. Mediana, para um registro
+ * esquecido não distorcer. Sem pelo menos 4 intervalos, não prevê.
+ */
+export function predictNextFeed(entries: Entry[], now: number): { at: number; typical: number; sameTime: boolean } | null {
+  const feeds = entries.filter((e): e is Feed => e.kind === "feed").sort((a, b) => a.start - b.start);
+  const last = feeds[feeds.length - 1];
+  if (!last || last.end === null) return null;
+  const minuteOfDay = (t: number) => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
+  const ref = minuteOfDay(last.start);
+  const all: number[] = [], near: number[] = [];
+  for (let i = 1; i < feeds.length; i++) {
+    const a = feeds[i - 1], gap = feeds[i].start - a.start;
+    if (a.start < addDays(now, -7) || gap > MAX_GAP) continue;
+    all.push(gap);
+    const diff = Math.abs(minuteOfDay(a.start) - ref);
+    if (Math.min(diff, 1440 - diff) <= 120) near.push(gap);
+  }
+  const sameTime = near.length >= 4;
+  const pool = sameTime ? near : all;
+  if (pool.length < 4) return null;
+  const typical = median(pool);
+  return { at: last.start + typical, typical, sameTime };
+}
+
 /** Blocos de um dia para a linha do tempo (recortados em 00:00–24:00). */
 export function dayBlocks(entries: Entry[], day: number, now: number) {
   const end = addDays(day, 1);
