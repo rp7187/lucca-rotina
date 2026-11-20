@@ -24,7 +24,9 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req)
+      // "no-cache": sempre confere com o servidor. Sem isso o Safari reaproveita a página por até 10 min
+      // (cache do GitHub Pages) e o app abre a versão antiga logo depois de uma publicação.
+      fetch(req, { cache: "no-cache" })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put("./", copy));

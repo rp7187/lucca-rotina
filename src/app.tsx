@@ -32,10 +32,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [editing, setEditing] = useState<Entry | { kind: Entry["kind"] } | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
     db.getAll().then((es) => setEntries(es.sort(byStart))).catch((e) => setError(String(e)));
     db.requestPersist();
+    const onUpdate = () => setUpdateReady(true);
+    window.addEventListener("app-update", onUpdate);
+    return () => window.removeEventListener("app-update", onUpdate);
   }, []);
 
   const guard = useCallback(async (op: () => Promise<void>) => {
@@ -70,6 +74,11 @@ export function App() {
   return (
     <>
       <main class="page">
+        {updateReady && (
+          <button type="button" class="update-bar" onClick={() => location.reload()}>
+            Versão nova disponível <b>Atualizar</b>
+          </button>
+        )}
         {tab === "home" && <Home store={store} />}
         {tab === "history" && <History store={store} />}
         {tab === "stats" && <Stats entries={entries} />}
