@@ -1,73 +1,87 @@
-import { entryEnd, feedDur, sideDur, type Entry, type Feed, type Sleep } from "./model";
+import { entryEnd, feedDur, sideDur, type Bath, type Entry, type Feed, type Sleep } from "./model";
 import { HOUR, addDays, startOfDay } from "./time";
 
 /** Intervalos maiores que isso são tratados como "sem registro" (não entram nas médias). */
 const MAX_GAP = 12 * HOUR;
 
+export type Longest = { ms: number; start: number; end: number; ongoing: boolean };
+
 export type DayStats = {
   day: number; // início do dia (00:00 local)
-  partial: boolean; // hoje (dia ainda em curso)
+  partial: boolean; // dia ainda em curso (ou recortado num horário, na comparação de "Hoje")
   feeds: number;
   feedMs: number;
   leftMs: number;
   rightMs: number;
   intervals: number[]; // início→início entre mamadas consecutivas (ms), atribuídos ao dia da 2ª
-  sleepMs: number; // sono dentro do dia (sonecas que cruzam a meia-noite são divididas)
-  naps: number; // sonecas iniciadas no dia
-  longestSleepMs: number;
-  wakeWindows: number[]; // fim de uma soneca → início da próxima
-  baths: number;
+  bands: number[]; // mamadas iniciadas em cada faixa de 3h (8 faixas: 0–3h, 3–6h…)
+  sleepMs: number; // sono dentro do dia (sono que cruza a meia-noite é dividido)
+  sleeps: number; // sonos iniciados no dia (dia e noite)
+  sleepDurs: number[]; // duração de cada sono terminado que começou no dia
+  longest: Longest | null; // maior sono iniciado no dia
+  wakeWindows: number[]; // fim de um sono → início do próximo
+  baths: number[]; // horários dos banhos
 };
 
 export type Summary = {
-  basisDays: number; // dias usados nas médias
+  days: number; // dias usados nas médias
   feedsPerDay: number | null;
-  avgFeedMs: number | null;
-  avgIntervalMs: number | null;
+  interval: number | null; // "mama a cada"
+  feedDur: number | null; // duração média de uma mamada
+  bands: number[]; // mamadas por faixa de 3h, por dia
   sleepPerDay: number | null;
-  napsPerDay: number | null;
-  avgNapMs: number | null;
-  longestSleepMs: number | null;
-  avgWakeMs: number | null;
+  sleepsPerDay: number | null;
+  sleepDur: number | null; // duração média de um sono
+  wake: number | null; // acordado entre sonos
+  longest: Longest | null;
   bathsPerDay: number | null;
+  bathTimes: number[];
   leftMs: number;
   rightMs: number;
 };
 
+type Split = { feeds: Feed[]; sleeps: Sleep[]; baths: Bath[] };
+
 const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
-const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+export const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
 
-/** Estatísticas dos últimos `nDays` dias (incluindo hoje). */
-export function computeStats(entries: Entry[], now: number, nDays: number) {
-  const today = startOfDay(now);
-  const first = addDays(today, -(nDays - 1));
-  const feeds = entries.filter((e): e is Feed => e.kind === "feed").sort((a, b) => a.start - b.start);
-  const sleeps = entries.filter((e): e is Sleep => e.kind === "sleep").sort((a, b) => a.start - b.start);
+function split(entries: Entry[]): Split {
+  const byStart = (a: Entry, b: Entry) => a.start - b.start;
+  return {
+    feeds: entries.filter((e): e is Feed => e.kind === "feed").sort(byStart),
+    sleeps: entries.filter((e): e is Sleep => e.kind === "sleep").sort(byStart),
+    baths: entries.filter((e): e is Bath => e.kind === "bath").sort(byStart),
+  };
+}
 
-  const days: DayStats[] = [];
-  for (let d = first; d <= today; d = addDays(d, 1)) {
-    days.push({ day: d, partial: d === today, feeds: 0, feedMs: 0, leftMs: 0, rightMs: 0, intervals: [], sleepMs: 0, naps: 0, longestSleepMs: 0, wakeWindows: [], baths: 0 });
-  }
-  const dayOf = (t: number) => days.find((x) => x.day === startOfDay(t));
+/** Números de um dia. `cut` recorta o dia num horário (usado para comparar "hoje até agora" com "ontem até a mesma hora"). */
+function dayStats({ feeds, sleeps, baths }: Split, day: number, now: number, cut = Infinity): DayStats {
+  const dayEnd = addDays(day, 1);
+  const end = Math.min(dayEnd, cut, now);
+  const d: DayStats = {
+    day, partial: end < dayEnd, feeds: 0, feedMs: 0, leftMs: 0, rightMs: 0, intervals: [], bands: Array(8).fill(0),
+    sleepMs: 0, sleeps: 0, sleepDurs: [], longest: null, wakeWindows: [], baths: [],
+  };
 
   feeds.forEach((f, i) => {
-    const d = dayOf(f.start);
-    if (!d) return;
+    if (f.start < day || f.start >= end) return;
     d.feeds++;
     d.feedMs += feedDur(f, now);
     d.leftMs += sideDur(f, "E", now);
     d.rightMs += sideDur(f, "D", now);
+    d.bands[Math.floor(new Date(f.start).getHours() / 3)]++;
     const prev = feeds[i - 1];
     if (prev && f.start - prev.start <= MAX_GAP) d.intervals.push(f.start - prev.start);
   });
 
   sleeps.forEach((s, i) => {
-    const end = entryEnd(s, now);
-    for (const d of days) d.sleepMs += overlap(s.start, end, d.day, addDays(d.day, 1));
-    const d = dayOf(s.start);
-    if (!d) return;
-    d.naps++;
-    d.longestSleepMs = Math.max(d.longestSleepMs, end - s.start);
+    const sEnd = Math.min(entryEnd(s, now), cut);
+    d.sleepMs += overlap(s.start, sEnd, day, end);
+    if (s.start < day || s.start >= end) return;
+    d.sleeps++;
+    const ms = sEnd - s.start;
+    if (s.end !== null && s.end <= cut) d.sleepDurs.push(ms);
+    if (!d.longest || ms > d.longest.ms) d.longest = { ms, start: s.start, end: sEnd, ongoing: s.end === null };
     const prev = sleeps[i - 1];
     if (prev?.end != null) {
       const gap = s.start - prev.end;
@@ -75,36 +89,69 @@ export function computeStats(entries: Entry[], now: number, nDays: number) {
     }
   });
 
-  for (const e of entries) if (e.kind === "bath") { const d = dayOf(e.start); if (d) d.baths++; }
+  for (const b of baths) if (b.start >= day && b.start < end) d.baths.push(b.start);
+  return d;
+}
 
-  // Médias por dia: só dias completos desde o primeiro registro (hoje distorce: o dia não acabou).
-  const firstRecord = entries.length ? startOfDay(Math.min(...entries.map((e) => e.start))) : today;
-  let basis = days.filter((d) => !d.partial && d.day >= firstRecord);
-  if (!basis.length) basis = days.filter((d) => d.partial);
-  const perDay = (f: (d: DayStats) => number) => (basis.length ? basis.reduce((s, d) => s + f(d), 0) / basis.length : null);
-  const totalFeeds = basis.reduce((s, d) => s + d.feeds, 0);
-  const totalNaps = basis.reduce((s, d) => s + d.naps, 0);
-
-  const summary: Summary = {
-    basisDays: basis.length,
+function summarize(days: DayStats[]): Summary {
+  const n = days.length;
+  const sum = (f: (d: DayStats) => number) => days.reduce((s, d) => s + f(d), 0);
+  const perDay = (f: (d: DayStats) => number) => (n ? sum(f) / n : null);
+  const feeds = sum((d) => d.feeds);
+  let longest: Longest | null = null;
+  for (const d of days) if (d.longest && (!longest || d.longest.ms > longest.ms)) longest = d.longest;
+  return {
+    days: n,
     feedsPerDay: perDay((d) => d.feeds),
-    avgFeedMs: totalFeeds ? basis.reduce((s, d) => s + d.feedMs, 0) / totalFeeds : null,
-    avgIntervalMs: mean(basis.flatMap((d) => d.intervals)),
+    interval: mean(days.flatMap((d) => d.intervals)),
+    feedDur: feeds ? sum((d) => d.feedMs) / feeds : null,
+    bands: Array.from({ length: 8 }, (_, i) => (n ? sum((d) => d.bands[i]) / n : 0)),
     sleepPerDay: perDay((d) => d.sleepMs),
-    napsPerDay: perDay((d) => d.naps),
-    avgNapMs: totalNaps ? basis.reduce((s, d) => s + d.sleepMs, 0) / totalNaps : null,
-    longestSleepMs: days.some((d) => d.longestSleepMs) ? Math.max(...days.map((d) => d.longestSleepMs)) : null,
-    avgWakeMs: mean(basis.flatMap((d) => d.wakeWindows)),
-    bathsPerDay: perDay((d) => d.baths),
-    leftMs: days.reduce((s, d) => s + d.leftMs, 0),
-    rightMs: days.reduce((s, d) => s + d.rightMs, 0),
+    sleepsPerDay: perDay((d) => d.sleeps),
+    sleepDur: mean(days.flatMap((d) => d.sleepDurs)),
+    wake: mean(days.flatMap((d) => d.wakeWindows)),
+    longest,
+    bathsPerDay: perDay((d) => d.baths.length),
+    bathTimes: days.flatMap((d) => d.baths),
+    leftMs: sum((d) => d.leftMs),
+    rightMs: sum((d) => d.rightMs),
   };
+}
 
-  // Mamadas por hora do dia (início), no período todo.
-  const byHour = Array.from({ length: 24 }, () => 0);
-  for (const f of feeds) if (f.start >= first) byHour[new Date(f.start).getHours()]++;
+/**
+ * Estatísticas do período.
+ * - `nDays === 1`: hoje até agora, comparado com ontem até o mesmo horário.
+ * - demais: médias dos `nDays` dias completos antes de hoje, comparadas com os `nDays` dias anteriores a eles.
+ *   Hoje entra só nos gráficos (`days`), como última barra.
+ * Dias antes do primeiro registro não entram nas médias (puxariam tudo para baixo).
+ */
+export function computeStats(entries: Entry[], now: number, nDays: number) {
+  const sp = split(entries);
+  const today = startOfDay(now);
+  const firstRecord = entries.length ? startOfDay(Math.min(...entries.map((e) => e.start))) : today;
+  const range = (from: number) => Array.from({ length: nDays }, (_, i) => dayStats(sp, addDays(from, i), now));
 
-  return { days, summary, byHour, first };
+  let cur: DayStats[], prev: DayStats[], days: DayStats[];
+  if (nDays === 1) {
+    cur = [dayStats(sp, today, now)];
+    prev = [dayStats(sp, addDays(today, -1), now, addDays(now, -1))];
+    days = cur;
+  } else {
+    cur = range(addDays(today, -nDays));
+    prev = range(addDays(today, -2 * nDays));
+    days = [...cur, dayStats(sp, today, now)];
+  }
+  const curBasis = cur.filter((d) => d.day >= firstRecord);
+  const prevBasis = prev.filter((d) => d.day >= firstRecord);
+
+  return {
+    days,
+    cur: summarize(curBasis),
+    prev: prevBasis.length ? summarize(prevBasis) : null,
+    basisFirst: curBasis[0]?.day ?? null,
+    basisLast: cur[cur.length - 1].day,
+    lastBath: sp.baths[sp.baths.length - 1] ?? null,
+  };
 }
 
 /** Blocos de um dia para a linha do tempo (recortados em 00:00–24:00). */
