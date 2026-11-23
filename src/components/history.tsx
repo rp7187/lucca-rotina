@@ -1,11 +1,12 @@
 import { useState } from "preact/hooks";
 import type { Store } from "../app";
 import { useNow } from "../hooks";
-import { entryEnd, feedDur, sideDur, sidesLabel, type Entry, type Feed } from "../model";
+import { TAG_NAME, entryEnd, feedDur, sideDur, sidesLabel, type Entry, type Feed } from "../model";
+import { cm, kg } from "../growth";
 import { HOUR, addDays, clock, dayLabel, dur, startOfDay } from "../time";
 
 type Filter = "all" | Entry["kind"];
-const FILTERS: [Filter, string][] = [["all", "Tudo"], ["feed", "Mamadas"], ["sleep", "Sono"], ["bath", "Banho"]];
+const FILTERS: [Filter, string][] = [["all", "Tudo"], ["feed", "Mamadas"], ["sleep", "Sono"], ["bath", "Banho"], ["measure", "Medidas"]];
 
 export function History({ store }: { store: Store }) {
   const now = useNow(30_000);
@@ -40,6 +41,7 @@ export function History({ store }: { store: Store }) {
             <button type="button" class="btn small ghost" onClick={() => add("feed")}><span class="dot feed" /> Mamada</button>
             <button type="button" class="btn small ghost" onClick={() => add("sleep")}><span class="dot sleep" /> Sono</button>
             <button type="button" class="btn small ghost" onClick={() => add("bath")}><span class="dot bath" /> Banho</button>
+            <button type="button" class="btn small ghost" onClick={() => add("measure")}><span class="dot measure" /> Peso/altura</button>
           </div>
         </div>
       )}
@@ -66,7 +68,7 @@ export function History({ store }: { store: Store }) {
                     <button type="button" class="item" onClick={() => store.edit(e)}>
                       <span class={`dot ${e.kind}`} />
                       <span class="what">
-                        {e.kind === "feed" ? `Mamada · ${sidesLabel(e)}` : e.kind === "bath" ? "Banho" : "Sono"}
+                        {e.kind === "feed" ? `Mamada · ${sidesLabel(e)}` : e.kind === "bath" ? "Banho" : e.kind === "measure" ? (e.tag ? `Medição · ${TAG_NAME[e.tag]}` : "Medição") : "Sono"}
                         {e.kind === "feed" && (
                           <small class="muted">
                             {[
@@ -76,7 +78,12 @@ export function History({ store }: { store: Store }) {
                           </small>
                         )}
                       </span>
-                      {e.kind === "bath" ? (
+                      {e.kind === "measure" ? (
+                        <span class="when">
+                          {e.heightCm != null ? cm(e.heightCm) : ""}
+                          <b>{e.weightG != null ? kg(e.weightG) : ""}</b>
+                        </span>
+                      ) : e.kind === "bath" ? (
                         <span class="when"><b>{clock(e.start)}</b></span>
                       ) : (
                         <span class="when">

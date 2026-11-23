@@ -13,9 +13,22 @@ export type Sleep = { id: string; kind: "sleep"; start: number; end: number | nu
 /** Banho: só o horário (registro pontual; `end` = `start`). Adicionado depois da v1 — tipo novo, os antigos não mudam. */
 export type Bath = { id: string; kind: "bath"; start: number; end: number };
 
-export type Entry = Feed | Sleep | Bath;
+/** Marca de uma medição especial: a do nascimento e a da alta do hospital (no máximo uma de cada). */
+export type MeasureTag = "birth" | "discharge";
 
-export const KIND_NAME: Record<Entry["kind"], string> = { feed: "mamada", sleep: "soneca", bath: "banho" };
+/**
+ * Medição de peso e/ou altura (registro pontual; `end` = `start`, ao meio-dia da data informada).
+ * Adicionado depois da v1 — tipo novo, os antigos não mudam. Peso em gramas, altura em cm; ao menos um dos dois.
+ */
+export type Measure = { id: string; kind: "measure"; start: number; end: number; weightG?: number; heightCm?: number; tag?: MeasureTag };
+
+export type Entry = Feed | Sleep | Bath | Measure;
+
+/** Registro novo ainda sem dados (abre o formulário). `tag` só para medição. */
+export type Draft = { kind: Entry["kind"]; tag?: MeasureTag };
+
+export const KIND_NAME: Record<Entry["kind"], string> = { feed: "mamada", sleep: "soneca", bath: "banho", measure: "medição" };
+export const TAG_NAME: Record<MeasureTag, string> = { birth: "Nascimento", discharge: "Alta do hospital" };
 
 export const SIDE_NAME: Record<Side, string> = { E: "Esquerdo", D: "Direito" };
 export const other = (s: Side): Side => (s === "E" ? "D" : "E");
@@ -62,6 +75,12 @@ export function isEntry(x: unknown): x is Entry {
   if (!okTimes) return false;
   if (e.kind === "sleep") return true;
   if (e.kind === "bath") return typeof e.end === "number";
+  if (e.kind === "measure") {
+    const optNum = (v: unknown) => v === undefined || (typeof v === "number" && v > 0);
+    return typeof e.end === "number" && optNum(e.weightG) && optNum(e.heightCm) &&
+      (e.weightG !== undefined || e.heightCm !== undefined) &&
+      (e.tag === undefined || e.tag === "birth" || e.tag === "discharge");
+  }
   return e.kind === "feed" && Array.isArray(e.segments) &&
     e.segments.every((g: Record<string, unknown>) => (g.side === "E" || g.side === "D") && typeof g.start === "number");
 }

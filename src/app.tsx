@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import * as db from "./db";
-import type { Entry } from "./model";
+import type { Draft, Entry } from "./model";
 import { Home } from "./components/home";
 import { History } from "./components/history";
 import { Stats } from "./components/stats";
@@ -14,7 +14,7 @@ export type Store = {
   /** Importação de backup: mescla por id (registros iguais são substituídos). */
   merge: (es: Entry[]) => Promise<void>;
   clear: () => Promise<void>;
-  edit: (e: Entry | { kind: Entry["kind"] }) => void;
+  edit: (e: Entry | Draft) => void;
 };
 
 type Tab = "home" | "history" | "stats" | "settings";
@@ -31,7 +31,7 @@ export function App() {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("home");
-  const [editing, setEditing] = useState<Entry | { kind: Entry["kind"] } | null>(null);
+  const [editing, setEditing] = useState<Entry | Draft | null>(null);
   const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function App() {
         )}
         {tab === "home" && <Home store={store} />}
         {tab === "history" && <History store={store} />}
-        {tab === "stats" && <Stats entries={entries} />}
+        {tab === "stats" && <Stats entries={entries} onEdit={setEditing} />}
         {tab === "settings" && <Settings store={store} />}
       </main>
       <nav class="tabbar" aria-label="Navegação">

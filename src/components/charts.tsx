@@ -201,3 +201,67 @@ export function Legend({ items }: { items: [string, string][] }) {
     </div>
   );
 }
+
+type Point = { t: number; v: number };
+
+/**
+ * Linha ao longo do tempo (peso, altura). O eixo x é proporcional às datas; o eixo y não começa em zero
+ * (crescimento de 3 para 5 kg sumiria numa escala desde zero). Toque em um ponto mostra o detalhe.
+ */
+export function LineChart({ points, steps, tick, short, describe, color, summary }: {
+  points: Point[];
+  steps: number[]; // passos possíveis do eixo y
+  tick: (v: number) => string; // rótulo do eixo y
+  short: (v: number) => string; // valor escrito sobre o ponto
+  describe: (i: number) => string; // detalhe ao tocar
+  color: "measure";
+  summary: string; // texto do detalhe sem seleção
+}) {
+  const [sel, setSel] = useState<number | null>(null);
+  if (points.length < 2) return <p class="sub">O gráfico aparece a partir da segunda medição.</p>;
+  const W = 360, H = 220, L = 40, R = 18, T = 24, B = 26;
+  const pw = W - L - R, ph = H - T - B;
+  const t0 = points[0].t, t1 = points[points.length - 1].t;
+  const span = Math.max(t1 - t0, 86_400_000);
+  const vs = points.map((p) => p.v);
+  const vmin = Math.min(...vs), vmax = Math.max(...vs);
+  const step = steps.find((s) => Math.ceil(vmax / s) - Math.floor(vmin / s) <= 4) ?? steps[steps.length - 1];
+  const lo = Math.floor(vmin / step) * step;
+  const hi = Math.max(lo + step, Math.ceil(vmax / step) * step);
+  const x = (t: number) => L + ((t - t0) / span) * pw;
+  const y = (v: number) => T + ph * (1 - (v - lo) / (hi - lo));
+  const grid: number[] = [];
+  for (let v = lo; v <= hi + step / 1000; v += step) grid.push(v);
+  const xTicks = [0, 1 / 3, 2 / 3, 1].map((f) => t0 + f * span);
+  const labelAll = points.length <= 6;
+  const d = points.map((p, i) => `${i ? "L" : "M"}${x(p.t)},${y(p.v)}`).join("");
+
+  return (
+    <figure class="chart">
+      <p class="chart-detail" aria-live="polite">{sel !== null ? describe(sel) : summary}</p>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={points.map((_, i) => describe(i)).join("; ")}>
+        {grid.map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} class={v === lo ? "axis" : "grid"} />
+            <text x={L - 6} y={y(v) + 4} class="ytick" text-anchor="end">{tick(v)}</text>
+          </g>
+        ))}
+        {xTicks.map((t, i) => (
+          <text key={i} x={x(t)} y={H - 6} class="xtick" text-anchor={i === 0 ? "start" : i === 3 ? "end" : "middle"}>
+            {new Date(t).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+          </text>
+        ))}
+        <path d={d} class={`line ${color}`} />
+        {points.map((p, i) => (
+          <g key={i} class="hit" onClick={() => setSel(sel === i ? null : i)}>
+            <circle cx={x(p.t)} cy={y(p.v)} r={16} fill="transparent" />
+            <circle cx={x(p.t)} cy={y(p.v)} r={sel === i ? 6 : 4.5} class={`pt ${color} ${sel === i ? "sel" : ""}`} />
+            {(labelAll || i === points.length - 1) && (
+              <text x={x(p.t)} y={y(p.v) - 10} class="val" text-anchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{short(p.v)}</text>
+            )}
+          </g>
+        ))}
+      </svg>
+    </figure>
+  );
+}
